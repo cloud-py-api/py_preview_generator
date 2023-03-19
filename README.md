@@ -1,2 +1,2 @@
-# py_preview_generator
+# Nextcloud Preview Generator
 Nextcloud Preview generator using Python (concept)

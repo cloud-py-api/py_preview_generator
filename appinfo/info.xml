@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<info>
+	<id>py_preview_generator</id>
+	<name>Python Preview Generator</name>
+	<summary>Preview generator (using python)</summary>
+	<description><![CDATA[Python Preview Generator provides service to get image preview in Nextcloud]]></description>
+	<version>0.1.0</version>
+	<licence>agpl</licence>
+	<author mail="andrey18106x@gmail.com" homepage="https://github.com/andrey18106">Andrey Borysenko</author>
+	<author mail="bigcat88@icloud.com" homepage="https://github.com/bigcat88">Alexander Piskun</author>
+	<namespace>PyPreview</namespace>
+	<documentation>
+		<developer>https://github.com/cloud-py-api/py_preview_generator</developer>
+	</documentation>
+	<category>integration</category>
+	<website>https://github.com/cloud-py-api/py_preview_generator</website>
+	<bugs>https://github.com/cloud-py-api/py_preview_generator/issues</bugs>
+	<repository type="git">https://github.com/cloud-py-api/py_preview_generator.git</repository>
+	<dependencies>
+		<nextcloud min-version="26" max-version="27"/>
+	</dependencies>
+</info>
