@@ -15,7 +15,7 @@ from requests import Response, request
 APP = FastAPI()
 INPUT_QUEUE: Queue = Queue()
 OPTIONS = {
-    "sizes": [128, 256],
+    "sizes": [256],
     "output_format": "JPEG",
     "quality": 70,
     "cores": 2,
@@ -36,7 +36,13 @@ def options(
     if quality is not None:
         OPTIONS["quality"] = quality
     if cores is not None:
+        old_cores = OPTIONS["cores"]
         OPTIONS["cores"] = cores if cores else cpu_count()
+        diff = OPTIONS["cores"] - old_cores
+        if diff > 0:
+            add_threads(diff)
+        else:
+            pass  # set exit flags?
     return Response()
 
 
@@ -48,20 +54,26 @@ def thumbnail(file_id: int, user_id: str = ""):
 
 @APP.get("/queue")
 def queue_list():
-    return {"nItems": INPUT_QUEUE.qsize}
+    return {"nItems": INPUT_QUEUE.qsize, "nThreads": len(THREADS)}
 
 
 def request_file(user_id: str, file_id: int) -> bytes:
-    response = request(
-        "GET",
-        argv[1],
-        params={
-            "user_id": user_id,
-            "file_id": file_id,
-        },  # type: ignore
-        timeout=30,
-    )
-    return response.content if response.ok else b""
+    try:
+        response = request(
+            "GET",
+            argv[1],
+            params={
+                "user_id": user_id,
+                "file_id": file_id,
+            },
+            timeout=30,
+        )
+    except Exception as e:  # pylint: disable=broad-except
+        print(e)
+        return b""
+    data = response.content if response.ok else b""
+    response.close()
+    return data
 
 
 def save_thumbnail(user_id: str, file_id: int, data: bytes) -> None:
@@ -71,7 +83,7 @@ def save_thumbnail(user_id: str, file_id: int, data: bytes) -> None:
         params={
             "user_id": user_id,
             "file_id": file_id,
-        },  # type: ignore
+        },
         files={"data": data},
         timeout=30,
     )
@@ -80,28 +92,33 @@ def save_thumbnail(user_id: str, file_id: int, data: bytes) -> None:
 def background_thread():
     print("bt: started")
     while True:
-        user_id, file_id = INPUT_QUEUE.get(timeout=None)
+        file_id, user_id = INPUT_QUEUE.get(timeout=None)
         print(f"bt: processing: {user_id}:{file_id}")
         data = request_file(user_id, file_id)
         if data:
             im = Image.open(BytesIO(data))
-            im.thumbnail((64, 64))
-            if im.mode != "RGB":
-                im = im.convert("RGB")
-            out = BytesIO()
-            im.save(out, format=OPTIONS["format"], quality=OPTIONS["quality"])
-            out.seek(0)
-            save_thumbnail(user_id, file_id, out.read())
+            for size in OPTIONS["sizes"]:
+                im.thumbnail((size, size))
+                if im.mode != "RGB":
+                    im = im.convert("RGB")
+                out = BytesIO()
+                im.save(out, format=OPTIONS["output_format"], quality=OPTIONS["quality"])
+                out.seek(0)
+                save_thumbnail(user_id, file_id, out.read())
+
+
+def add_threads(count: int) -> None:
+    for _ in range(count):
+        t = Thread(target=background_thread)
+        t.start()
+        THREADS.append(t)
 
 
 @APP.on_event("startup")
 def start_threads():
     print("request_file_endpoint: ", argv[1])
     print("store_thumbnail_endpoint: ", argv[2])
-    for _ in range(OPTIONS["cores"]):
-        t = Thread(target=background_thread)
-        t.start()
-        THREADS.append(t)
+    add_threads(OPTIONS["cores"])
 
 
 @APP.on_event("shutdown")

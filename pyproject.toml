@@ -23,8 +23,3 @@ messages_control.disable = [
     "missing-function-docstring",
     "line-too-long",
 ]
-
-[tool.mypy]
-ignore_missing_imports = true
-warn_no_return = true
-strict_optional = true
