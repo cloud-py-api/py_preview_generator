@@ -25,8 +25,10 @@
 
 namespace OCA\PyPreview\BackgroundJob;
 
+use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
 use OCP\IConfig;
+use Psr\Log\LoggerInterface;
 
 /**
  * Class Preview
@@ -39,14 +41,25 @@ class Preview extends QueuedJob {
 	/** @var IConfig */
 	private $config;
 
+	/** @var LoggerInterface */
+	private $logger;
+
 	public function __construct(
+		ITimeFactory $time,
 		IConfig $config,
+		LoggerInterface $logger
 	) {
 		// TODO
+		parent::__construct($time);
 		$this->config = $config;
+		$this->logger = $logger;
 	}
 
+	/**
+	 * @param mixed $argument
+	 */
 	protected function run($argument) {
 		// TODO
+		$this->logger->error('[' . self::class . '] PreviewBackgroundJob executed. Argument: ' . json_encode($argument) . '.');
 	}
 }

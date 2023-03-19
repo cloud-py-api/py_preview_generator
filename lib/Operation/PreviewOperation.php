@@ -129,13 +129,13 @@ class PreviewOperation implements ISpecificOperation {
 
 			// TODO: Add needed checks (e.g. if file is encrypted, if file already has preview, etc.)
 			$this->logger->error('[' . self::class . '] onEvent: ' . $eventName . ' - ' . $node->getPath() . ' - ' . $node->getMimePart());
-			// $this->jobsList->add(Preview::class, [
-			// 	'fileId' => $node->getId(),
-			// 	'ownerId' => $node->getOwner()->getUID(),
-			// 	'path' => $node->getPath(),
-			// 	'encrypted' => $node->isEncrypted(),
-			// 	// TODO: Add needed parameters
-			// ]);
+			$this->jobsList->add(Preview::class, [
+				'fileId' => $node->getId(),
+				'ownerId' => $node->getOwner()->getUID(),
+				'path' => $node->getPath(),
+				'encrypted' => $node->isEncrypted(),
+				// TODO: Add needed parameters
+			]);
 		} catch (\OCP\Files\NotFoundException $e) {
 		}
 	}
