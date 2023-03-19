@@ -34,23 +34,26 @@ use OCP\WorkflowEngine\IRuleMatcher;
 use OCP\WorkflowEngine\ISpecificOperation;
 use Psr\Log\LoggerInterface;
 
-use OCA\PyPreview\AppInfo\Application;
-use OCA\PyPreview\BackgroundJob\Preview;
 use OCP\BackgroundJob\IJobList;
 use OCP\EventDispatcher\GenericEvent;
 use OCP\Files\Folder;
 use OCP\Files\Node;
+use OCP\IPreview;
 use UnexpectedValueException;
+
+use OCA\PyPreview\AppInfo\Application;
+use OCA\PyPreview\BackgroundJob\Preview;
+use OCA\PyPreview\Service\PreviewService;
 
 class PreviewOperation implements ISpecificOperation {
 	public const MODES = [
 		'small',
 		'medium',
-		'large',
+		// 'large',
 		'small;medium',
-		'small;large',
-		'medium;large',
-		'small;medium;large',
+		// 'small;large',
+		// 'medium;large',
+		// 'small;medium;large',
 	];
 
 	/** @var LoggerInterface */
@@ -65,16 +68,26 @@ class PreviewOperation implements ISpecificOperation {
 	/** @var IJobList */
 	private $jobsList;
 
+	/** @var IPreview */
+	private $previewManager;
+
+	/** @var PreviewService */
+	private $previewService;
+
 	public function __construct(
 		IL10N $l,
 		LoggerInterface $logger,
 		IURLGenerator $urlGenerator,
-		IJobList $jobsList
+		IJobList $jobsList,
+		IPreview $previewManager,
+		PreviewService $previewService
 	) {
 		$this->l = $l;
 		$this->logger = $logger;
 		$this->urlGenerator = $urlGenerator;
 		$this->jobsList = $jobsList;
+		$this->previewManager = $previewManager;
+		$this->previewService = $previewService;
 	}
 
 	public function validateOperation(string $name, array $checks, string $operation): void {
@@ -100,7 +113,6 @@ class PreviewOperation implements ISpecificOperation {
 	}
 
 	public function onEvent(string $eventName, Event $event, IRuleMatcher $ruleMatcher): void {
-		// TODO
 		$this->logger->error('[' . self::class . '] onEvent: ' . $eventName);
 		if (!$event instanceof GenericEvent) {
 			return;
@@ -108,7 +120,7 @@ class PreviewOperation implements ISpecificOperation {
 		try {
 			if ($eventName === '\OCP\Files::postRename' || $eventName === '\OCP\Files::postCopy') {
 				/** @var Node $oldNode */
-				[, $node] = $event->getSubject();
+				[$oldNode, $node] = $event->getSubject();
 			} else {
 				$node = $event->getSubject();
 			}
@@ -125,16 +137,30 @@ class PreviewOperation implements ISpecificOperation {
 				return;
 			}
 
-			// $matches = $ruleMatcher->getFlows(false);
+			$matches = $ruleMatcher->getFlows(false);
+			$operations = [];
+			foreach ($matches as $match) {
+				$matchOperations = explode(';', $match['operation']);
+				foreach ($matchOperations as $operation) {
+					if (!in_array($operation, $operations)) {
+						array_push($operations, $operation);
+					}
+				}
+			}
 
-			// TODO: Add needed checks (e.g. if file is encrypted, if file already has preview, etc.)
-			$this->logger->error('[' . self::class . '] onEvent: ' . $eventName . ' - ' . $node->getPath() . ' - ' . $node->getMimePart());
+			// TODO: Uncomment preview check when it's tested and works
+			// if ($this->previewManager->isAvailable($node)) {
+			// 	return;
+			// }
+			if ($this->previewService->isPreviewAvailable($node->getId(), $node->getOwner()->getUID())) {
+				return;
+			}
 			$this->jobsList->add(Preview::class, [
 				'fileId' => $node->getId(),
 				'ownerId' => $node->getOwner()->getUID(),
 				'path' => $node->getPath(),
 				'encrypted' => $node->isEncrypted(),
-				// TODO: Add needed parameters
+				'operations' => $operations,
 			]);
 		} catch (\OCP\Files\NotFoundException $e) {
 		}

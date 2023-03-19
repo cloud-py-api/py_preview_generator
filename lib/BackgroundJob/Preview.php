@@ -25,9 +25,9 @@
 
 namespace OCA\PyPreview\BackgroundJob;
 
+use OCA\PyPreview\Service\PreviewService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\BackgroundJob\QueuedJob;
-use OCP\IConfig;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -38,20 +38,19 @@ use Psr\Log\LoggerInterface;
  * @package OCA\PyPreview\BackgroundJob
  */
 class Preview extends QueuedJob {
-	/** @var IConfig */
-	private $config;
+	/** @var PreviewService */
+	private $service;
 
 	/** @var LoggerInterface */
 	private $logger;
 
 	public function __construct(
 		ITimeFactory $time,
-		IConfig $config,
+		PreviewService $service,
 		LoggerInterface $logger
 	) {
-		// TODO
 		parent::__construct($time);
-		$this->config = $config;
+		$this->service = $service;
 		$this->logger = $logger;
 	}
 
@@ -59,7 +58,14 @@ class Preview extends QueuedJob {
 	 * @param mixed $argument
 	 */
 	protected function run($argument) {
-		// TODO
-		$this->logger->error('[' . self::class . '] PreviewBackgroundJob executed. Argument: ' . json_encode($argument) . '.');
+		$fileId = $argument['fileId'];
+		$ownerId = $argument['ownerId'];
+		$path = $argument['path'];
+		$encrypted = $argument['encrypted'];
+		$operations = $argument['operations'];
+		if (!$encrypted && isset($fileId, $ownerId, $path, $operations)) {
+			$this->logger->error('[' . self::class . '] PreviewJob run: ' . json_encode($argument));
+			$this->service->proceedPreviewJob($fileId, $ownerId, $path, $operations);
+		}
 	}
 }

@@ -25,30 +25,118 @@
 
 namespace OCA\PyPreview\Service;
 
-use OC\Http\Client\ClientService;
+use OCP\IConfig;
+use OCP\Files\IAppData;
+use OCP\Http\Client\IClient;
+use OCP\Http\Client\IClientService;
+use Psr\Log\LoggerInterface;
+
+use OCA\PyPreview\AppInfo\Application;
 
 class PreviewService {
-	const PREVIEW_WIDTH_DEFAULT = 512;
-	const PREVIEW_HEIGHT_DEFAULT = 512;
+	const PREVIEW_WIDTH_DEFAULT = 256;
+	const PREVIEW_HEIGHT_DEFAULT = 256;
 
-	/** @var ClientService */
-	private $clientService;
+	const PYTHON_SERVICE_URL = 'http://localhost:9001';
+	const PYTHON_THUMBNAIL_ROUTE = '/thumbnail';
 
-	public function __construct(ClientService $clientService) {
-		$this->clientService = $clientService;
+	/** @var IClient */
+	private $client;
+
+	/** @var IConfig */
+	private $config;
+
+	/** @var IAppData */
+	private $appData;
+
+	/** @var LoggerInterface */
+	private $logger;
+
+	public function __construct(
+		IClientService $clientService,
+		IConfig $config,
+		IAppData $appData,
+		LoggerInterface $logger
+	) {
+		$this->client = $clientService->newClient();
+		$this->config = $config;
+		$this->appData = $appData;
+		$this->logger = $logger;
 	}
 
 	public function getPreview(
 		string $fileId,
-		int $width = self::PREVIEW_WIDTH_DEFAULT,
-		int $height = self::PREVIEW_HEIGHT_DEFAULT
+		string $ownerId,
+		string $size = 'small'
 	) {
-		$preview = $this->generatePreview($fileId, $width, $height);
-		return $preview;
+		if ($this->isPreviewAvailable($fileId, $ownerId, $size)) {
+			$previewFolder = $this->getAppDataFolder($ownerId);
+			$previewFile = $previewFolder->getFile($fileId . '-' . $size . '.jpg');
+			return $previewFile->getContent();
+		}
+		return null;
 	}
 
-	private function generatePreview(string $fileId, int $width, int $height) {
-		// TODO request to python script
-		return null;
+	/**
+	 * @param string $fileId
+	 * @param string $ownerId
+	 * @param string $size small, medium or large
+	 */
+	public function isPreviewAvailable(
+		string $fileId,
+		string $ownerId,
+		string $size = 'small'
+	) {
+		$previewFolder = $this->getAppDataFolder($ownerId);
+		try {
+			$previewFile = $previewFolder->getFile($fileId . '-' . $size . '.jpg');
+			return $previewFile->getSize() > 0;
+		} catch (\OCP\Files\NotFoundException $e) {
+			return false;
+		}
+		return false;
+	}
+
+	/**
+	 * @param int $fileId
+	 * @param string $ownerId
+	 * @param string $path
+	 * @param array $operations
+	 * @return void
+	 */
+	public function proceedPreviewJob(
+		int $fileId,
+		string $ownerId,
+		string $path,
+		array $operations
+	) {
+		$this->logger->error('[' . self::class . '] proceedPreviewJob : ' . $fileId . ' ' . $ownerId . ' ' . $path . ' ' . $operations);
+		$response = $this->client->get(
+			PreviewService::PYTHON_SERVICE_URL . PreviewService::PYTHON_THUMBNAIL_ROUTE, [
+			'query' => [
+				'file_id' => $fileId,
+				'user_id' => $ownerId,
+			],
+		]);
+		return $response;
+	}
+
+	public function getAppDataFolder(string $ownerId) {
+		try {
+			$ncDataFolder = $this->config->getSystemValue('datadirectory', null);
+			$ncInstanceId = $this->config->getSystemValue('instanceid', null);
+			$appDataFolderPath = $ncDataFolder . '/appdata_' . $ncInstanceId . '/'
+				. Application::APP_ID . '/' . $ownerId;
+			if (!file_exists($appDataFolderPath)) {
+				$this->appData->newFolder($ownerId);
+			}
+			return $this->appData->getFolder($ownerId);
+		} catch(\OCP\Files\NotPermittedException $e) {
+			$this->logger->error('[' . self::class . '] getAppDataFolder : ' . $e->getMessage());
+			return null;
+		} catch (\RuntimeException $e) {
+			$this->logger->error('[' . self::class . '] getAppDataFolder : ' . $e->getMessage());
+			return null;
+		}
 	}
 }

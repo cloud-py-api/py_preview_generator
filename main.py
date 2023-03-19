@@ -12,6 +12,9 @@ from fastapi import FastAPI
 from PIL import Image
 from requests import Response, request
 
+import urllib3
+urllib3.disable_warnings()
+
 APP = FastAPI()
 INPUT_QUEUE: Queue = Queue()
 OPTIONS = {
@@ -67,6 +70,7 @@ def request_file(user_id: str, file_id: int) -> bytes:
                 "file_id": file_id,
             },
             timeout=30,
+            verify=False,
         )
     except Exception as e:  # pylint: disable=broad-except
         print(e)
@@ -86,6 +90,7 @@ def save_thumbnail(user_id: str, file_id: int, data: bytes) -> None:
         },
         files={"data": data},
         timeout=30,
+        verify=False,
     )
 
 

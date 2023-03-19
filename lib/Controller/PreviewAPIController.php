@@ -26,52 +26,110 @@
 namespace OCA\PyPreview\Controller;
 
 use OCP\IRequest;
+use OCP\Files\IRootFolder;
 use OCP\AppFramework\Controller;
-
-use OCA\PyPreview\Service\PreviewService;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\DataDisplayResponse;
+
+use OCA\PyPreview\Service\PreviewService;
+use OCP\AppFramework\Http\Response;
+use OCP\Files\IAppData;
+use Psr\Log\LoggerInterface;
 
 class PreviewAPIController extends Controller {
 	/** @var PreviewService */
 	private $service;
 
+	/** @var IRootFolder */
+	private $rootFolder;
+
+	/** @var IAppData */
+	private $appData;
+
+	/** @var LoggerInterface */
+	private $logger;
+
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		PreviewService $service) {
+		IRootFolder $iRootFolder,
+		IAppData $appData,
+		PreviewService $service,
+		LoggerInterface $logger
+	) {
 		parent::__construct($appName, $request);
 
+		$this->rootFolder = $iRootFolder;
+		$this->appData = $appData;
 		$this->service = $service;
+		$this->logger = $logger;
 	}
 
 	/**
 	 * @NoAdminRequired
 	 * @NoCSRFRequired
 	 *
-	 * @param string $fileId
-	 * @param int $width
+	 * @param int $fileId
+	 * @param string $width
 	 * @param int $height
 	 */
 	public function getPreview(
-		string $fileId,
-		int $width = PreviewService::PREVIEW_WIDTH_DEFAULT,
-		int $height = PreviewService::PREVIEW_HEIGHT_DEFAULT
+		int $fileId,
+		string $ownerId,
+		string $size = 'small'
 	) {
-		$preview = $this->service->getPreview($fileId, $width, $height);
+		$preview = $this->service->getPreview($fileId, $ownerId, $size);
 		return new DataDisplayResponse($preview, Http::STATUS_OK, ['Content-Type' => 'image/png']);
 	}
 
 	/**
 	 * @NoAdminRequired
 	 * @NoCSRFRequired
-	 * 
-	 * @param string $fileId
-	 * @param int $width
-	 * @param int $height
+	 * @PublicPage
 	 *
+	 * @param int $file_id
+	 * @param string $user_id
 	 */
-	public function savePreview(string $fileId, int $width, int $height) {
-		// TODO receive preview image from Python
+	public function getFileContents(int $file_id, string $user_id) {
+		$userFolder = $this->rootFolder->getUserFolder($user_id);
+		$nodes = $userFolder->getById($file_id);
+		if (count($nodes) === 0) {
+			return new DataDisplayResponse([], Http::STATUS_NOT_FOUND);
+		}
+		/** @var \OCP\Files\File */
+		$file = $nodes[0];
+		$contents = $file->getContent();
+		$response = new DataDisplayResponse($contents, Http::STATUS_OK, ['Content-Type' => $file->getMimeType()]);
+		$response->cacheFor(3600 * 24, false, true);
+		return $response;
+	}
+
+	/**
+	 * @NoAdminRequired
+	 * @NoCSRFRequired
+	 * @PublicPage
+	 *
+	 * Receive preview image from Python request
+	 */
+	public function savePreview(int $file_id, string $user_id, string $size = 'small') {
+		$uploadedFile = $this->request->getUploadedFile('data');
+		if (!$uploadedFile['error'] && $uploadedFile['size'] === 0) {
+			return new DataDisplayResponse([], Http::STATUS_BAD_REQUEST);
+		}
+		$this->logger->error('[' . self::class . '] savePreview: ' . $uploadedFile['error'] . ' ' . $uploadedFile['size']);
+		$imageData = file_get_contents($uploadedFile['tmp_name']);
+		$userFolder = $this->rootFolder->getUserFolder($user_id);
+		$nodes = $userFolder->getById($file_id);
+		if (count($nodes) === 0) {
+			return new DataDisplayResponse([], Http::STATUS_NOT_FOUND);
+		}
+		/** @var \OCP\Files\File */
+		$file = $nodes[0];
+		$imageName = $file->getId() . '-' . $size . '.jpg';
+		$previewFolder = $this->appData->getFolder($user_id);
+		$previewFolder->newFile($imageName)->putContent($imageData);
+		$response = new Response();
+		$response->setStatus(Http::STATUS_OK);
+		return $response;
 	}
 }
